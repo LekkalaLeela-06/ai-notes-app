@@ -1,20 +1,14 @@
-# Use Node.js
 FROM node:18-alpine
-
-# Set working directory
 WORKDIR /app
 
-# Copy only backend folder
+# copy backend folder into the image
 COPY backend/ ./backend/
 
-# Move into backend
 WORKDIR /app/backend
 
-# Install dependencies
-RUN npm install --production
+# install production deps
+RUN npm ci --production
 
-# Expose backend port
 EXPOSE 10000
 
-# Start the server
-CMD ["node", "server.js"]
+CMD ["node","server.js"]
