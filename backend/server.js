@@ -1,105 +1,107 @@
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const axios = require("axios");
-const { Pool } = require("pg");
+import express from "express";
+import cors from "cors";
+import pkg from "pg";
+import dotenv from "dotenv";
 
+dotenv.config();
+
+const { Pool } = pkg;
 const app = express();
+const PORT = process.env.PORT || 10000;
+
+/* ------------------ MIDDLEWARE ------------------ */
 app.use(cors());
 app.use(express.json());
 
+/* ------------------ DATABASE ------------------ */
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
-
-// === AI FUNCTIONS ===
-async function generateSummary(text) {
-  const resp = await axios.post(
-    "https://api.openai.com/v1/chat/completions",
-    {
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "You are a helpful summarizer." },
-        { role: "user", content: `Summarize this:\n\n${text}` },
-      ],
-    },
-    { headers: { Authorization: `Bearer ${OPENAI_KEY}` } }
-  );
-
-  return resp.data.choices[0].message.content.trim();
-}
-
-async function generateEmbedding(text) {
-  const resp = await axios.post(
-    "https://api.openai.com/v1/embeddings",
-    {
-      model: "text-embedding-3-small",
-      input: text,
-    },
-    { headers: { Authorization: `Bearer ${OPENAI_KEY}` } }
-  );
-
-  return resp.data.data[0].embedding;
-}
-
-// === ROUTES ===
-
-// health
-app.get("/", (req, res) => res.send("AI Notes Backend Running!"));
-
-// get all notes
-app.get("/notes", async (req, res) => {
-  const result = await pool.query(
-    "SELECT id, title, summary FROM notes ORDER BY id DESC"
-  );
-  res.json(result.rows);
+/* ------------------ HEALTH CHECK ------------------ */
+app.get("/", (req, res) => {
+  res.send("AI Notes Backend Running!");
 });
 
-// create a note
-app.post("/notes", async (req, res) => {
-  const { text } = req.body;
-  if (!text) return res.status(400).json({ error: "text required" });
-
+/* ------------------ CREATE TABLE (RUN ONCE) ------------------ */
+app.get("/setup", async (req, res) => {
   try {
-    const summary = await generateSummary(text);
-    const title = summary.substring(0, 50);
-    const embedding = await generateEmbedding(text);
+    await pool.query(`
+      CREATE EXTENSION IF NOT EXISTS vector;
 
-    const sql =
-      "INSERT INTO notes(title, content, summary, embedding) VALUES($1,$2,$3,$4) RETURNING id, title, summary";
-    const r = await pool.query(sql, [title, text, summary, embedding]);
+      CREATE TABLE IF NOT EXISTS notes (
+        id SERIAL PRIMARY KEY,
+        title TEXT,
+        content TEXT,
+        summary TEXT,
+        embedding vector(1536),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-    res.status(201).json(r.rows[0]);
+    res.send("Database setup completed");
   } catch (err) {
-    console.error(err.response?.data || err);
-    res.status(500).json({ error: "AI or DB error" });
+    console.error(err);
+    res.status(500).send("Setup failed");
   }
 });
 
-// semantic search
-app.get("/search", async (req, res) => {
-  const q = req.query.q;
-  if (!q) return res.status(400).json({ error: "q required" });
-
+/* ------------------ SAVE NOTE ------------------ */
+app.post("/api/notes", async (req, res) => {
   try {
-    const emb = await generateEmbedding(q);
+    const { title, content } = req.body;
 
-    const sql = `
-      SELECT id, title, summary, embedding <-> $1 AS distance
-      FROM notes
-      ORDER BY embedding <-> $1
-      LIMIT 10;
-    `;
+    // (For now) simple summary
+    const summary = content.slice(0, 100) + "...";
 
-    const result = await pool.query(sql, [emb]);
+    await pool.query(
+      "INSERT INTO notes (title, content, summary) VALUES ($1, $2, $3)",
+      [title, content, summary]
+    );
+
+    res.status(201).json({ message: "Note saved successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to save note" });
+  }
+});
+
+/* ------------------ GET ALL NOTES ------------------ */
+app.get("/api/notes", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, title, content, summary FROM notes ORDER BY id DESC"
+    );
     res.json(result.rows);
   } catch (err) {
-    console.error(err.response?.data || err);
-    res.status(500).json({ error: "Search error" });
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch notes" });
   }
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Backend running on port", PORT));
+/* ------------------ SEARCH NOTES ------------------ */
+app.get("/api/search", async (req, res) => {
+  const { q } = req.query;
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, title, summary
+      FROM notes
+      WHERE title ILIKE $1 OR content ILIKE $1
+      `,
+      [`%${q}%`]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Search failed" });
+  }
+});
+
+/* ------------------ START SERVER ------------------ */
+app.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT}`);
+});
