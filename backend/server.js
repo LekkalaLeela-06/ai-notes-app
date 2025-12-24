@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import pkg from "pg";
 import dotenv from "dotenv";
+import OpenAI from "openai";
 
 dotenv.config();
 
@@ -17,6 +18,11 @@ app.use(express.json());
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+});
+
+/* ------------------ OPENAI ------------------ */
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 /* ------------------ HEALTH CHECK ------------------ */
@@ -36,6 +42,7 @@ app.get("/setup", async (req, res) => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
     res.send("Database setup completed");
   } catch (err) {
     console.error("SETUP ERROR:", err);
@@ -50,14 +57,18 @@ app.post("/api/notes", async (req, res) => {
 
     const { title, content } = req.body;
 
-    if (!content) {
+    if (!content || content.trim() === "") {
       return res.status(400).json({ error: "Content is required" });
     }
 
     const summary = content.slice(0, 120) + "...";
 
     const result = await pool.query(
-      "INSERT INTO notes (title, content, summary) VALUES ($1, $2, $3) RETURNING *",
+      `
+      INSERT INTO notes (title, content, summary)
+      VALUES ($1, $2, $3)
+      RETURNING *
+      `,
       [title || "", content, summary]
     );
 
@@ -82,7 +93,7 @@ app.get("/api/notes", async (req, res) => {
   }
 });
 
-/* ------------------ SIMPLE SEARCH ------------------ */
+/* ------------------ SEARCH NOTES ------------------ */
 app.get("/api/search", async (req, res) => {
   try {
     const { q } = req.query;
@@ -101,6 +112,31 @@ app.get("/api/search", async (req, res) => {
   } catch (err) {
     console.error("SEARCH ERROR:", err);
     res.status(500).json({ error: "Search failed" });
+  }
+});
+
+/* ------------------ AI SUMMARY ------------------ */
+app.post("/api/summary", async (req, res) => {
+  try {
+    const { content } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ error: "Content is required" });
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        { role: "system", content: "Summarize the following note clearly." },
+        { role: "user", content },
+      ],
+    });
+
+    const summary = completion.choices[0].message.content;
+    res.json({ summary });
+  } catch (err) {
+    console.error("AI SUMMARY ERROR:", err);
+    res.status(500).json({ error: "AI summary failed" });
   }
 });
 
