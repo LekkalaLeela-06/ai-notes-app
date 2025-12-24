@@ -1,150 +1,209 @@
 import { useEffect, useState } from "react";
 
-const BACKEND_URL = "https://ai-notes-app.onrender.com";
+const BACKEND_URL = "https://ai-notes-app-5cid.onrender.com";
 
 function App() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [notes, setNotes] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // 🔹 Fetch all notes
+  /* ---------------- FETCH NOTES ---------------- */
   const fetchNotes = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/notes`);
-      const data = await res.json();
-      setNotes(data);
-    } catch (err) {
-      console.error("Error fetching notes:", err);
-    }
+    const res = await fetch(`${BACKEND_URL}/notes`);
+    const data = await res.json();
+    setNotes(data);
   };
 
-  // 🔹 Save a new note
-  const saveNote = async () => {
-    if (!title || !content) return;
-
-    try {
-      await fetch(`${BACKEND_URL}/notes`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ title, content }),
-      });
-
-      setTitle("");
-      setContent("");
-      fetchNotes();
-    } catch (err) {
-      console.error("Error saving note:", err);
-    }
-  };
-
-  // 🔹 AI Semantic Search
-  const searchNotes = async () => {
-    if (!searchQuery) return;
-
-    try {
-      const res = await fetch(`${BACKEND_URL}/search`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query: searchQuery }),
-      });
-
-      const data = await res.json();
-      setSearchResults(data);
-    } catch (err) {
-      console.error("Error searching notes:", err);
-    }
-  };
-
-  // 🔹 Fetch notes on load
   useEffect(() => {
     fetchNotes();
   }, []);
 
+  /* ---------------- SAVE NOTE ---------------- */
+  const saveNote = async () => {
+    if (!title.trim() || !content.trim()) {
+      alert("Title and content cannot be empty");
+      return;
+    }
+
+    setLoading(true);
+    await fetch(`${BACKEND_URL}/notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, content }),
+    });
+
+    setTitle("");
+    setContent("");
+    setLoading(false);
+    fetchNotes();
+  };
+
+  /* ---------------- AI SEARCH ---------------- */
+  const searchNotes = async () => {
+    if (!query.trim()) return;
+
+    setLoading(true);
+    const res = await fetch(`${BACKEND_URL}/notes/search`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+
+    const data = await res.json();
+    setSearchResults(data);
+    setLoading(false);
+  };
+
+  /* ---------------- UI ---------------- */
   return (
-    <div style={{ padding: "30px", maxWidth: "900px", margin: "auto" }}>
-      <h1>AI Notes App</h1>
+    <div style={styles.page}>
+      <h1 style={styles.title}>AI Notes App</h1>
+      <p style={styles.subtitle}>AI-powered notes with semantic search</p>
 
       {/* ADD NOTE */}
-      <div style={{ marginBottom: "20px" }}>
+      <div style={styles.card}>
+        <h2>Add Note</h2>
         <input
-          type="text"
-          placeholder="Note title"
+          style={styles.input}
+          placeholder="Title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
         />
-
         <textarea
-          placeholder="Note content"
+          style={styles.textarea}
+          placeholder="Write your note here..."
+          rows={4}
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          rows={5}
-          style={{ width: "100%", padding: "10px" }}
         />
-
-        <button onClick={saveNote} style={{ marginTop: "10px" }}>
-          Save Note
+        <button style={styles.button} onClick={saveNote}>
+          {loading ? "Saving..." : "Save Note"}
         </button>
       </div>
 
       {/* SEARCH */}
-      <div style={{ marginBottom: "20px" }}>
+      <div style={styles.card}>
+        <h2>AI Semantic Search</h2>
         <input
-          type="text"
-          placeholder="Search notes (AI semantic search)"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
+          style={styles.input}
+          placeholder="Search by meaning (AI-powered)"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
         />
+        <button style={styles.button} onClick={searchNotes}>
+          {loading ? "Searching..." : "Search"}
+        </button>
 
-        <button onClick={searchNotes}>Search</button>
+        {searchResults.length > 0 && (
+          <div style={styles.results}>
+            <h3>Search Results</h3>
+            {searchResults.map((note) => (
+              <div key={note.id} style={styles.note}>
+                <strong>{note.title || "Untitled Note"}</strong>
+                <p>{note.summary || note.content}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-
-      {/* SEARCH RESULTS */}
-      {searchResults.length > 0 && (
-        <div>
-          <h2>Search Results</h2>
-          {searchResults.map((note) => (
-            <div
-              key={note.id}
-              style={{
-                border: "1px solid #ccc",
-                padding: "10px",
-                marginBottom: "10px",
-              }}
-            >
-              <h3>{note.title}</h3>
-              <p>{note.content}</p>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* ALL NOTES */}
-      <div>
+      <div style={styles.card}>
         <h2>All Notes</h2>
-        {notes.map((note) => (
-          <div
-            key={note.id}
-            style={{
-              border: "1px solid #ddd",
-              padding: "10px",
-              marginBottom: "10px",
-            }}
-          >
-            <h3>{note.title}</h3>
-            <p>{note.content}</p>
-          </div>
-        ))}
+
+        {notes.length === 0 ? (
+          <p style={styles.empty}>No notes added yet.</p>
+        ) : (
+          notes.map((note) => (
+            <div key={note.id} style={styles.note}>
+              <strong>{note.title || "Untitled Note"}</strong>
+              <p>{note.content}</p>
+              <small style={styles.summary}>
+                AI Summary: {note.summary}
+              </small>
+            </div>
+          ))
+        )}
       </div>
+
+      <footer style={styles.footer}>
+        Built with React • OpenAI • PostgreSQL (pgvector)
+      </footer>
     </div>
   );
 }
+
+/* ---------------- STYLES ---------------- */
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "#f8fafc",
+    padding: "40px",
+    fontFamily: "Arial, sans-serif",
+  },
+  title: {
+    textAlign: "center",
+    marginBottom: "5px",
+  },
+  subtitle: {
+    textAlign: "center",
+    color: "#6b7280",
+    marginBottom: "30px",
+  },
+  card: {
+    maxWidth: "900px",
+    margin: "0 auto 30px",
+    background: "#fff",
+    padding: "24px",
+    borderRadius: "12px",
+    boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
+  },
+  input: {
+    width: "100%",
+    padding: "12px",
+    marginBottom: "12px",
+    borderRadius: "8px",
+    border: "1px solid #d1d5db",
+  },
+  textarea: {
+    width: "100%",
+    padding: "12px",
+    marginBottom: "12px",
+    borderRadius: "8px",
+    border: "1px solid #d1d5db",
+  },
+  button: {
+    background: "#2563eb",
+    color: "#fff",
+    padding: "10px 18px",
+    borderRadius: "8px",
+    border: "none",
+    cursor: "pointer",
+  },
+  note: {
+    padding: "12px",
+    borderBottom: "1px solid #e5e7eb",
+    marginTop: "10px",
+  },
+  results: {
+    marginTop: "20px",
+  },
+  empty: {
+    color: "#6b7280",
+  },
+  summary: {
+    color: "#4b5563",
+    fontSize: "13px",
+  },
+  footer: {
+    textAlign: "center",
+    marginTop: "40px",
+    color: "#6b7280",
+    fontSize: "14px",
+  },
+};
 
 export default App;
