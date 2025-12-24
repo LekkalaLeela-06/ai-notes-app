@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import pkg from "pg";
 import dotenv from "dotenv";
-import OpenAI from "openai";
 
 dotenv.config();
 
@@ -20,11 +19,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-/* ------------------ OPENAI ------------------ */
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 /* ------------------ HEALTH CHECK ------------------ */
 app.get("/", (req, res) => {
   res.send("AI Notes Backend Running!");
@@ -34,92 +28,73 @@ app.get("/", (req, res) => {
 app.get("/setup", async (req, res) => {
   try {
     await pool.query(`
-      CREATE EXTENSION IF NOT EXISTS vector;
-
       CREATE TABLE IF NOT EXISTS notes (
         id SERIAL PRIMARY KEY,
         title TEXT,
         content TEXT,
         summary TEXT,
-        embedding vector(1536),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
     res.send("Database setup completed");
   } catch (err) {
-    console.error(err);
+    console.error("SETUP ERROR:", err);
     res.status(500).send("Setup failed");
   }
 });
 
 /* ------------------ SAVE NOTE ------------------ */
-app.post("/notes", async (req, res) => {
+app.post("/api/notes", async (req, res) => {
   try {
+    console.log("SAVE NOTE BODY:", req.body);
+
     const { title, content } = req.body;
 
-    if (!title || !content) {
-      return res.status(400).json({ error: "Title and content required" });
+    if (!content) {
+      return res.status(400).json({ error: "Content is required" });
     }
 
-    // Generate embedding
-    const embeddingResponse = await openai.embeddings.create({
-      model: "text-embedding-3-small",
-      input: content,
-    });
-
-    const embedding = embeddingResponse.data[0].embedding;
-
-    // Simple summary (can be AI later)
     const summary = content.slice(0, 120) + "...";
 
-    await pool.query(
-      `
-      INSERT INTO notes (title, content, summary, embedding)
-      VALUES ($1, $2, $3, $4)
-      `,
-      [title, content, summary, embedding]
+    const result = await pool.query(
+      "INSERT INTO notes (title, content, summary) VALUES ($1, $2, $3) RETURNING *",
+      [title || "", content, summary]
     );
 
-    res.status(201).json({ message: "Note saved successfully" });
+    console.log("SAVED NOTE:", result.rows[0]);
+    res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("SAVE NOTE ERROR:", err);
+    console.error("SAVE ERROR:", err);
     res.status(500).json({ error: "Failed to save note" });
   }
 });
 
 /* ------------------ GET ALL NOTES ------------------ */
-app.get("/notes", async (req, res) => {
+app.get("/api/notes", async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT id, title, content, summary FROM notes ORDER BY id DESC"
+      "SELECT * FROM notes ORDER BY id DESC"
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("FETCH NOTES ERROR:", err);
+    console.error("FETCH ERROR:", err);
     res.status(500).json({ error: "Failed to fetch notes" });
   }
 });
 
-/* ------------------ SEMANTIC SEARCH ------------------ */
-app.post("/notes/search", async (req, res) => {
+/* ------------------ SIMPLE SEARCH ------------------ */
+app.get("/api/search", async (req, res) => {
   try {
-    const { query } = req.body;
-
-    const queryEmbeddingResponse = await openai.embeddings.create({
-      model: "text-embedding-3-small",
-      input: query,
-    });
-
-    const embedding = queryEmbeddingResponse.data[0].embedding;
+    const { q } = req.query;
 
     const result = await pool.query(
       `
       SELECT id, title, summary
       FROM notes
-      ORDER BY embedding <-> $1
-      LIMIT 5
+      WHERE title ILIKE $1 OR content ILIKE $1
+      ORDER BY id DESC
       `,
-      [embedding]
+      [`%${q}%`]
     );
 
     res.json(result.rows);
