@@ -2,19 +2,22 @@ import { useEffect, useState } from "react";
 
 const BACKEND_URL = "https://ai-notes-app-5cid.onrender.com";
 
-function App() {
+export default function App() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [notes, setNotes] = useState([]);
-  const [query, setQuery] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
 
   /* ---------------- FETCH NOTES ---------------- */
   const fetchNotes = async () => {
-    const res = await fetch(`${BACKEND_URL}/notes`);
-    const data = await res.json();
-    setNotes(data);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/notes`);
+      const data = await res.json();
+      setNotes(data);
+    } catch (err) {
+      console.error("Fetch failed", err);
+    }
   };
 
   useEffect(() => {
@@ -23,13 +26,11 @@ function App() {
 
   /* ---------------- SAVE NOTE ---------------- */
   const saveNote = async () => {
-    if (!title.trim() || !content.trim()) {
-      alert("Title and content cannot be empty");
-      return;
-    }
+    if (!content.trim()) return alert("Write something!");
 
     setLoading(true);
-    await fetch(`${BACKEND_URL}/notes`, {
+
+    await fetch(`${BACKEND_URL}/api/notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title, content }),
@@ -38,100 +39,66 @@ function App() {
     setTitle("");
     setContent("");
     setLoading(false);
-    fetchNotes();
+
+    fetchNotes(); // refresh UI
   };
 
-  /* ---------------- AI SEARCH ---------------- */
-  const searchNotes = async () => {
-    if (!query.trim()) return;
+  /* ---------------- SEARCH ---------------- */
+  const filteredNotes = notes.filter(
+    (n) =>
+      n.title?.toLowerCase().includes(search.toLowerCase()) ||
+      n.content?.toLowerCase().includes(search.toLowerCase())
+  );
 
-    setLoading(true);
-    const res = await fetch(`${BACKEND_URL}/notes/search`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
-    });
-
-    const data = await res.json();
-    setSearchResults(data);
-    setLoading(false);
-  };
-
-  /* ---------------- UI ---------------- */
   return (
     <div style={styles.page}>
-      <h1 style={styles.title}>AI Notes App</h1>
-      <p style={styles.subtitle}>AI-powered notes with semantic search</p>
+      <h1 style={styles.heading}>AI Notes App</h1>
+      <p style={styles.sub}>AI-powered notes with search</p>
 
       {/* ADD NOTE */}
       <div style={styles.card}>
         <h2>Add Note</h2>
         <input
           style={styles.input}
-          placeholder="Title"
+          placeholder="Title (optional)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
         <textarea
           style={styles.textarea}
-          placeholder="Write your note here..."
-          rows={4}
+          placeholder="Write your note..."
           value={content}
           onChange={(e) => setContent(e.target.value)}
         />
-        <button style={styles.button} onClick={saveNote}>
+        <button style={styles.button} onClick={saveNote} disabled={loading}>
           {loading ? "Saving..." : "Save Note"}
         </button>
       </div>
 
       {/* SEARCH */}
       <div style={styles.card}>
-        <h2>AI Semantic Search</h2>
         <input
           style={styles.input}
-          placeholder="Search by meaning (AI-powered)"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search notes..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
-        <button style={styles.button} onClick={searchNotes}>
-          {loading ? "Searching..." : "Search"}
-        </button>
+      </div>
 
-        {searchResults.length > 0 && (
-          <div style={styles.results}>
-            <h3>Search Results</h3>
-            {searchResults.map((note) => (
-              <div key={note.id} style={styles.note}>
-                <strong>{note.title || "Untitled Note"}</strong>
-                <p>{note.summary || note.content}</p>
-              </div>
-            ))}
+      {/* NOTES */}
+      <div>
+        {filteredNotes.length === 0 && (
+          <p style={{ textAlign: "center" }}>No notes found</p>
+        )}
+
+        {filteredNotes.map((note) => (
+          <div key={note.id} style={styles.note}>
+            <h3>{note.title || "Untitled Note"}</h3>
+            <p>{note.content}</p>
+            <small>{note.summary}</small>
           </div>
-        )}
+        ))}
       </div>
-
-      {/* ALL NOTES */}
-      <div style={styles.card}>
-        <h2>All Notes</h2>
-
-        {notes.length === 0 ? (
-          <p style={styles.empty}>No notes added yet.</p>
-        ) : (
-          notes.map((note) => (
-            <div key={note.id} style={styles.note}>
-              <strong>{note.title || "Untitled Note"}</strong>
-              <p>{note.content}</p>
-              <small style={styles.summary}>
-                AI Summary: {note.summary}
-              </small>
-            </div>
-          ))
-        )}
-      </div>
-
-      <footer style={styles.footer}>
-        Built with React • OpenAI • PostgreSQL (pgvector)
-      </footer>
     </div>
   );
 }
@@ -139,71 +106,57 @@ function App() {
 /* ---------------- STYLES ---------------- */
 const styles = {
   page: {
-    minHeight: "100vh",
-    background: "#f8fafc",
-    padding: "40px",
+    maxWidth: "900px",
+    margin: "auto",
+    padding: "2rem",
     fontFamily: "Arial, sans-serif",
+    background: "#f5f7fb",
+    minHeight: "100vh",
   },
-  title: {
+  heading: {
     textAlign: "center",
-    marginBottom: "5px",
+    marginBottom: "0.3rem",
   },
-  subtitle: {
+  sub: {
     textAlign: "center",
-    color: "#6b7280",
-    marginBottom: "30px",
+    color: "#666",
+    marginBottom: "2rem",
   },
   card: {
-    maxWidth: "900px",
-    margin: "0 auto 30px",
     background: "#fff",
-    padding: "24px",
-    borderRadius: "12px",
-    boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
+    padding: "1.5rem",
+    borderRadius: "8px",
+    marginBottom: "1.5rem",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
   },
   input: {
     width: "100%",
-    padding: "12px",
-    marginBottom: "12px",
-    borderRadius: "8px",
-    border: "1px solid #d1d5db",
+    padding: "10px",
+    marginBottom: "10px",
+    borderRadius: "5px",
+    border: "1px solid #ccc",
   },
   textarea: {
     width: "100%",
-    padding: "12px",
-    marginBottom: "12px",
-    borderRadius: "8px",
-    border: "1px solid #d1d5db",
+    minHeight: "100px",
+    padding: "10px",
+    borderRadius: "5px",
+    border: "1px solid #ccc",
+    marginBottom: "10px",
   },
   button: {
-    background: "#2563eb",
+    padding: "10px 20px",
+    background: "#4f46e5",
     color: "#fff",
-    padding: "10px 18px",
-    borderRadius: "8px",
     border: "none",
+    borderRadius: "5px",
     cursor: "pointer",
   },
   note: {
-    padding: "12px",
-    borderBottom: "1px solid #e5e7eb",
-    marginTop: "10px",
-  },
-  results: {
-    marginTop: "20px",
-  },
-  empty: {
-    color: "#6b7280",
-  },
-  summary: {
-    color: "#4b5563",
-    fontSize: "13px",
-  },
-  footer: {
-    textAlign: "center",
-    marginTop: "40px",
-    color: "#6b7280",
-    fontSize: "14px",
+    background: "#fff",
+    padding: "1rem",
+    borderRadius: "8px",
+    marginBottom: "1rem",
+    boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
   },
 };
-
-export default App;
