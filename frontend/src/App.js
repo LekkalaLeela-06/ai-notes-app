@@ -8,9 +8,11 @@ function App() {
   const [content, setContent] = useState("");
   const [notes, setNotes] = useState([]);
   const [search, setSearch] = useState("");
+  const [editTitle, setEditTitle] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editContent, setEditContent] = useState("");
   const [showSummaryId, setShowSummaryId] = useState(null);
+  
 
   /* ---------------- FETCH NOTES ---------------- */
   const fetchNotes = async () => {
@@ -48,20 +50,28 @@ function App() {
 
   /* ---------------- EDIT NOTE ---------------- */
   const startEdit = (note) => {
-    setEditingId(note.id);
-    setEditContent(note.content);
-  };
+  setEditingId(note.id);
+  setEditTitle(note.title || "");
+  setEditContent(note.content || "");
+};
+
 
   const saveEdit = async (id) => {
-    await fetch(`${BACKEND_URL}/api/notes/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: editContent }),
-    });
+  await fetch(`${BACKEND_URL}/api/notes/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: editTitle,
+      content: editContent,
+    }),
+  });
 
-    setEditingId(null);
-    fetchNotes();
-  };
+  setEditingId(null);
+  setEditTitle("");
+  setEditContent("");
+  fetchNotes();
+};
+
 
   /* ---------------- AI SUMMARY (ON DEMAND) ---------------- */
   const summarizeNote = async (id) => {
@@ -144,16 +154,25 @@ function App() {
 
             {/* EDIT MODE */}
             {editingId === note.id ? (
-              <>
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                />
-                <button onClick={() => saveEdit(note.id)}>Save</button>
-              </>
-            ) : (
-              <p>{note.content}</p>
-            )}
+  <>
+    <input
+      value={editTitle}
+      onChange={(e) => setEditTitle(e.target.value)}
+      placeholder="Edit title"
+    />
+
+    <textarea
+      value={editContent}
+      onChange={(e) => setEditContent(e.target.value)}
+    />
+
+    <button onClick={() => saveEdit(note.id)}>Save</button>
+  </>
+) : (
+  <p>{note.content}</p>
+)}
+
+
 
             {/* AI SUMMARY */}
             {showSummaryId === note.id && note.summary && (
