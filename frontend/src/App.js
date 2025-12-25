@@ -12,7 +12,7 @@ function App() {
   const [editContent, setEditContent] = useState("");
   const [showSummaryId, setShowSummaryId] = useState(null);
 
-  // 🔹 Fetch all notes
+  // 🔹 Fetch notes
   const fetchNotes = async () => {
     const res = await fetch(`${BACKEND_URL}/api/notes`);
     const data = await res.json();
@@ -40,11 +40,13 @@ function App() {
 
   // 🔹 Delete note
   const deleteNote = async (id) => {
-    await fetch(`${BACKEND_URL}/api/notes/${id}`, { method: "DELETE" });
+    await fetch(`${BACKEND_URL}/api/notes/${id}`, {
+      method: "DELETE",
+    });
     fetchNotes();
   };
 
-  // 🔹 Start editing
+  // 🔹 Start edit
   const startEdit = (note) => {
     setEditingId(note.id);
     setEditContent(note.content);
@@ -62,7 +64,7 @@ function App() {
     fetchNotes();
   };
 
-  // 🔹 AI Summarize (ON DEMAND)
+  // 🔹 AI Summarize (ON DEMAND ONLY)
   const summarizeNote = async (id) => {
     const res = await fetch(`${BACKEND_URL}/api/notes/${id}/summarize`, {
       method: "POST",
@@ -75,11 +77,15 @@ function App() {
     setShowSummaryId(id);
   };
 
-  // 🔹 Search filter
-  const filteredNotes = notes.filter(n =>
-    n.title.toLowerCase().includes(search.toLowerCase()) ||
-    n.content.toLowerCase().includes(search.toLowerCase())
-  );
+  // 🔹 SAFE SEARCH (FIXED NULL ERROR)
+  const filteredNotes = notes.filter(n => {
+    if (!search.trim()) return true;
+
+    return (
+      (n.title || "").toLowerCase().includes(search.toLowerCase()) ||
+      (n.content || "").toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   return (
     <div className="container">
@@ -93,11 +99,13 @@ function App() {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
+
         <textarea
           placeholder="Write your note..."
           value={content}
           onChange={(e) => setContent(e.target.value)}
         />
+
         <button onClick={saveNote}>Save Note</button>
       </div>
 
@@ -109,18 +117,20 @@ function App() {
         onChange={(e) => setSearch(e.target.value)}
       />
 
-      {/* NOTES */}
+      {/* NOTES LIST */}
       {filteredNotes.map(note => (
         <div key={note.id} className="note">
           <div className="note-header">
             <h3>{note.title || "Untitled"}</h3>
+
             <div className="icons">
-              <span onClick={() => summarizeNote(note.id)}>🤖</span>
-              <span onClick={() => startEdit(note)}>✏️</span>
-              <span onClick={() => deleteNote(note.id)}>🗑️</span>
+              <span title="Summarize" onClick={() => summarizeNote(note.id)}>🤖</span>
+              <span title="Edit" onClick={() => startEdit(note)}>✏️</span>
+              <span title="Delete" onClick={() => deleteNote(note.id)}>🗑️</span>
             </div>
           </div>
 
+          {/* EDIT MODE */}
           {editingId === note.id ? (
             <>
               <textarea
@@ -133,6 +143,7 @@ function App() {
             <p>{note.content}</p>
           )}
 
+          {/* AI SUMMARY (ONLY WHEN CLICKED) */}
           {showSummaryId === note.id && note.summary && (
             <div className="summary">
               <strong>AI Summary</strong>
