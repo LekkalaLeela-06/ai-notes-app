@@ -12,7 +12,7 @@ function App() {
   const [editContent, setEditContent] = useState("");
   const [showSummaryId, setShowSummaryId] = useState(null);
 
-  // 🔹 Fetch notes
+  /* ---------------- FETCH NOTES ---------------- */
   const fetchNotes = async () => {
     const res = await fetch(`${BACKEND_URL}/api/notes`);
     const data = await res.json();
@@ -23,7 +23,7 @@ function App() {
     fetchNotes();
   }, []);
 
-  // 🔹 Save note
+  /* ---------------- CREATE NOTE ---------------- */
   const saveNote = async () => {
     if (!content.trim()) return;
 
@@ -38,7 +38,7 @@ function App() {
     fetchNotes();
   };
 
-  // 🔹 Delete note
+  /* ---------------- DELETE NOTE ---------------- */
   const deleteNote = async (id) => {
     await fetch(`${BACKEND_URL}/api/notes/${id}`, {
       method: "DELETE",
@@ -46,13 +46,12 @@ function App() {
     fetchNotes();
   };
 
-  // 🔹 Start edit
+  /* ---------------- EDIT NOTE ---------------- */
   const startEdit = (note) => {
     setEditingId(note.id);
     setEditContent(note.content);
   };
 
-  // 🔹 Save edit
   const saveEdit = async (id) => {
     await fetch(`${BACKEND_URL}/api/notes/${id}`, {
       method: "PUT",
@@ -64,21 +63,23 @@ function App() {
     fetchNotes();
   };
 
-  // 🔹 AI Summarize (ON DEMAND ONLY)
+  /* ---------------- AI SUMMARY (ON DEMAND) ---------------- */
   const summarizeNote = async (id) => {
     const res = await fetch(`${BACKEND_URL}/api/notes/${id}/summarize`, {
       method: "POST",
     });
     const data = await res.json();
 
-    setNotes(notes.map(n =>
-      n.id === id ? { ...n, summary: data.summary } : n
-    ));
+    setNotes(
+      notes.map((n) =>
+        n.id === id ? { ...n, summary: data.summary } : n
+      )
+    );
     setShowSummaryId(id);
   };
 
-  // 🔹 SAFE SEARCH (FIXED NULL ERROR)
-  const filteredNotes = notes.filter(n => {
+  /* ---------------- SEARCH (SAFE) ---------------- */
+  const filteredNotes = notes.filter((n) => {
     if (!search.trim()) return true;
 
     return (
@@ -88,70 +89,82 @@ function App() {
   });
 
   return (
-    <div className="container">
-      <h1>AI Notes App</h1>
-      <p className="subtitle">Smart notes with on-demand AI summary</p>
+    <div className="app-wrapper">
+      {/* HEADER */}
+      <header className="app-header">
+        <h1>AI Notes</h1>
+        <p>Smart note-taking with on-demand AI summarization</p>
+      </header>
 
-      {/* ADD NOTE */}
-      <div className="card">
-        <input
-          placeholder="Title (optional)"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
+      {/* MAIN */}
+      <div className="container">
+        {/* ADD NOTE */}
+        <div className="card">
+          <input
+            placeholder="Title (optional)"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
 
-        <textarea
-          placeholder="Write your note..."
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-        />
+          <textarea
+            placeholder="Write your note..."
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+          />
 
-        <button onClick={saveNote}>Save Note</button>
-      </div>
-
-      {/* SEARCH */}
-      <input
-        className="search"
-        placeholder="Search notes..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-
-      {/* NOTES LIST */}
-      {filteredNotes.map(note => (
-        <div key={note.id} className="note">
-          <div className="note-header">
-            <h3>{note.title || "Untitled"}</h3>
-
-            <div className="icons">
-              <span title="Summarize" onClick={() => summarizeNote(note.id)}>🤖</span>
-              <span title="Edit" onClick={() => startEdit(note)}>✏️</span>
-              <span title="Delete" onClick={() => deleteNote(note.id)}>🗑️</span>
-            </div>
-          </div>
-
-          {/* EDIT MODE */}
-          {editingId === note.id ? (
-            <>
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-              />
-              <button onClick={() => saveEdit(note.id)}>Save</button>
-            </>
-          ) : (
-            <p>{note.content}</p>
-          )}
-
-          {/* AI SUMMARY (ONLY WHEN CLICKED) */}
-          {showSummaryId === note.id && note.summary && (
-            <div className="summary">
-              <strong>AI Summary</strong>
-              <p>{note.summary}</p>
-            </div>
-          )}
+          <button onClick={saveNote}>Save Note</button>
         </div>
-      ))}
+
+        {/* SEARCH */}
+        <input
+          className="search"
+          placeholder="Search notes..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+
+        {/* NOTES LIST */}
+        {filteredNotes.map((note) => (
+          <div key={note.id} className="note">
+            <div className="note-header">
+              <h3>{note.title || "Untitled"}</h3>
+
+              <div className="icons">
+                <span title="Summarize" onClick={() => summarizeNote(note.id)}>
+                  🤖
+                </span>
+                <span title="Edit" onClick={() => startEdit(note)}>
+                  ✏️
+                </span>
+                <span title="Delete" onClick={() => deleteNote(note.id)}>
+                  🗑️
+                </span>
+              </div>
+            </div>
+
+            {/* EDIT MODE */}
+            {editingId === note.id ? (
+              <>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                />
+                <button onClick={() => saveEdit(note.id)}>Save</button>
+              </>
+            ) : (
+              <p>{note.content}</p>
+            )}
+
+            {/* AI SUMMARY */}
+            {showSummaryId === note.id && note.summary && (
+              <div className="summary">
+                <strong>AI Summary</strong>
+                <p>{note.summary}</p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
