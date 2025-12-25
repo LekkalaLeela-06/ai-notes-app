@@ -1,7 +1,7 @@
 ## 🚀 Live Demo
 
 Frontend (Vercel):  
-https://ai-notes-app.vercel.app
+https://ai-notes-app-tawny-phi.vercel.app/
 
 Backend API (Render):  
 https://ai-notes-app-5cid.onrender.com
