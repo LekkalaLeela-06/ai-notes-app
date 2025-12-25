@@ -1,0 +1,76 @@
+body {
+  margin: 0;
+  font-family: "Inter", sans-serif;
+  background: linear-gradient(135deg, #eef2ff, #fdfdfd);
+}
+
+.app {
+  max-width: 900px;
+  margin: auto;
+  padding: 20px;
+}
+
+h1 {
+  text-align: center;
+  color: #3b82f6;
+}
+
+.new-note {
+  background: white;
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  box-shadow: 0 10px 25px rgba(0,0,0,.05);
+}
+
+.new-note input,
+.new-note textarea {
+  width: 100%;
+  margin: 6px 0;
+  padding: 10px;
+}
+
+.new-note button {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.notes {
+  display: grid;
+  gap: 15px;
+}
+
+.card {
+  background: white;
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0,0,0,.06);
+  transition: transform .2s ease;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+}
+
+.summary {
+  background: #eef2ff;
+  padding: 10px;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
+.actions {
+  margin-top: 10px;
+}
+
+.actions button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  margin-right: 10px;
+}
