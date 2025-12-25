@@ -2,100 +2,129 @@ import express from "express";
 import cors from "cors";
 import pkg from "pg";
 import dotenv from "dotenv";
-import OpenAI from "openai";
 
 dotenv.config();
-const { Pool } = pkg;
 
+const { Pool } = pkg;
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+/* ------------------ MIDDLEWARE ------------------ */
 app.use(cors());
 app.use(express.json());
 
+/* ------------------ DATABASE ------------------ */
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-/* Health */
+/* ------------------ HEALTH CHECK ------------------ */
 app.get("/", (req, res) => {
   res.send("AI Notes Backend Running!");
 });
 
-/* Get all notes */
+/* ------------------ GET ALL NOTES ------------------ */
 app.get("/api/notes", async (req, res) => {
-  const result = await pool.query(
-    "SELECT * FROM notes ORDER BY id DESC"
-  );
-  res.json(result.rows);
+  try {
+    const result = await pool.query(
+      "SELECT * FROM notes ORDER BY id DESC"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("FETCH NOTES ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch notes" });
+  }
 });
 
-/* Create note */
+/* ------------------ CREATE NOTE ------------------ */
 app.post("/api/notes", async (req, res) => {
-  const { title, content } = req.body;
-  const summary = null;
+  try {
+    const { title = "", content } = req.body;
 
-  const result = await pool.query(
-    "INSERT INTO notes (title, content, summary) VALUES ($1,$2,$3) RETURNING *",
-    [title || "", content, summary]
-  );
+    if (!content) {
+      return res.status(400).json({ error: "Content is required" });
+    }
 
-  res.json(result.rows[0]);
+    const result = await pool.query(
+      `INSERT INTO notes (title, content)
+       VALUES ($1, $2)
+       RETURNING *`,
+      [title, content]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("CREATE NOTE ERROR:", err);
+    res.status(500).json({ error: "Failed to save note" });
+  }
 });
 
-/* Update note */
+/* ------------------ UPDATE NOTE ------------------ */
 app.put("/api/notes/:id", async (req, res) => {
-  const { title, content } = req.body;
-  const { id } = req.params;
+  try {
+    const { id } = req.params;
+    const { title = "", content } = req.body;
 
-  const result = await pool.query(
-    "UPDATE notes SET title=$1, content=$2 WHERE id=$3 RETURNING *",
-    [title, content, id]
-  );
+    const result = await pool.query(
+      `UPDATE notes
+       SET title = $1, content = $2
+       WHERE id = $3
+       RETURNING *`,
+      [title, content, id]
+    );
 
-  res.json(result.rows[0]);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("UPDATE NOTE ERROR:", err);
+    res.status(500).json({ error: "Failed to update note" });
+  }
 });
 
-/* Delete note */
+/* ------------------ DELETE NOTE ------------------ */
 app.delete("/api/notes/:id", async (req, res) => {
-  await pool.query("DELETE FROM notes WHERE id=$1", [req.params.id]);
-  res.json({ success: true });
+  try {
+    const { id } = req.params;
+    await pool.query("DELETE FROM notes WHERE id = $1", [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE NOTE ERROR:", err);
+    res.status(500).json({ error: "Failed to delete note" });
+  }
 });
 
-/* AI Summarize (does NOT remove note) */
+/* ------------------ SUMMARIZE NOTE (POST ONLY) ------------------ */
 app.post("/api/notes/:id/summarize", async (req, res) => {
-  const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-  const noteRes = await pool.query(
-    "SELECT content FROM notes WHERE id=$1",
-    [id]
-  );
+    const noteRes = await pool.query(
+      "SELECT content FROM notes WHERE id = $1",
+      [id]
+    );
 
-  const content = noteRes.rows[0].content;
+    if (!noteRes.rows.length) {
+      return res.status(404).json({ error: "Note not found" });
+    }
 
-  const aiRes = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo",
-    messages: [
-      { role: "system", content: "Summarize clearly" },
-      { role: "user", content },
-    ],
-  });
+    const content = noteRes.rows[0].content;
 
-  const summary = aiRes.choices[0].message.content;
+    // ✅ SAFE summary (no OpenAI, no crash)
+    const summary = content.slice(0, 120) + "...";
 
-  await pool.query(
-    "UPDATE notes SET summary=$1 WHERE id=$2",
-    [summary, id]
-  );
+    await pool.query(
+      "UPDATE notes SET summary = $1 WHERE id = $2",
+      [summary, id]
+    );
 
-  res.json({ summary });
+    res.json({ summary });
+  } catch (err) {
+    console.error("SUMMARY ERROR:", err);
+    res.status(500).json({ error: "Failed to summarize note" });
+  }
 });
 
-app.listen(PORT, () =>
-  console.log(`Backend running on ${PORT}`)
-);
+/* ------------------ START SERVER ------------------ */
+app.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT}`);
+});
