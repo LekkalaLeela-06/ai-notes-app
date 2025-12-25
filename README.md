@@ -1,3 +1,12 @@
+## 🚀 Live Demo
+
+Frontend (Vercel):  
+https://ai-notes-app.vercel.app
+
+Backend API (Render):  
+https://ai-notes-app-5cid.onrender.com
+
+
 # AI Notes App (Full Stack + Docker + Render + AI Embeddings)
 
 A full-stack AI-powered Notes application:
