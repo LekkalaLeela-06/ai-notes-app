@@ -3,13 +3,19 @@ import { useEffect, useState } from "react";
 const API_URL = "https://ai-notes-app-5cid.onrender.com";
 
 function App() {
+  const [notes, setNotes] = useState([]);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [notes, setNotes] = useState([]);
   const [search, setSearch] = useState("");
-  const [loadingId, setLoadingId] = useState(null);
 
-  /* ---------------- FETCH NOTES ---------------- */
+  const [menuOpen, setMenuOpen] = useState(null);
+  const [loadingId, setLoadingId] = useState(null);
+  const [showSummary, setShowSummary] = useState({});
+  const [editId, setEditId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
+
+  /* ---------- FETCH NOTES ---------- */
   const fetchNotes = async () => {
     const res = await fetch(`${API_URL}/api/notes`);
     const data = await res.json();
@@ -20,9 +26,9 @@ function App() {
     fetchNotes();
   }, []);
 
-  /* ---------------- SAVE NOTE ---------------- */
+  /* ---------- ADD NOTE ---------- */
   const saveNote = async () => {
-    if (!content.trim()) return alert("Please write a note");
+    if (!content.trim()) return alert("Write something");
 
     await fetch(`${API_URL}/api/notes`, {
       method: "POST",
@@ -35,8 +41,38 @@ function App() {
     fetchNotes();
   };
 
-  /* ---------------- AI SUMMARY ---------------- */
-  const generateSummary = async (noteId) => {
+  /* ---------- DELETE ---------- */
+  const deleteNote = async (id) => {
+    if (!window.confirm("Delete this note?")) return;
+
+    await fetch(`${API_URL}/api/notes/${id}`, { method: "DELETE" });
+    fetchNotes();
+  };
+
+  /* ---------- EDIT ---------- */
+  const startEdit = (note) => {
+    setEditId(note.id);
+    setEditTitle(note.title);
+    setEditContent(note.content);
+    setMenuOpen(null);
+  };
+
+  const saveEdit = async () => {
+    await fetch(`${API_URL}/api/notes/${editId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: editTitle,
+        content: editContent,
+      }),
+    });
+
+    setEditId(null);
+    fetchNotes();
+  };
+
+  /* ---------- SUMMARY ---------- */
+  const summarize = async (noteId) => {
     setLoadingId(noteId);
 
     const res = await fetch(`${API_URL}/api/summary`, {
@@ -51,10 +87,12 @@ function App() {
       prev.map((n) => (n.id === noteId ? updated : n))
     );
 
+    setShowSummary((prev) => ({ ...prev, [noteId]: true }));
     setLoadingId(null);
+    setMenuOpen(null);
   };
 
-  /* ---------------- SEARCH FILTER ---------------- */
+  /* ---------- SEARCH ---------- */
   const filteredNotes = notes.filter(
     (n) =>
       n.title?.toLowerCase().includes(search.toLowerCase()) ||
@@ -64,158 +102,208 @@ function App() {
   return (
     <div style={styles.page}>
       <h1 style={styles.title}>AI Notes</h1>
-      <p style={styles.subtitle}>
-        Write notes. Summarize with AI when you need it.
-      </p>
 
       {/* ADD NOTE */}
       <div style={styles.card}>
-        <h2>Add Note</h2>
-
         <input
           style={styles.input}
           placeholder="Title (optional)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
-
         <textarea
           style={styles.textarea}
-          placeholder="Write your note here..."
+          placeholder="Write your note..."
           value={content}
           onChange={(e) => setContent(e.target.value)}
         />
-
         <button style={styles.primaryBtn} onClick={saveNote}>
           Save Note
         </button>
       </div>
 
       {/* SEARCH */}
-      <div style={styles.searchBox}>
-        <input
-          style={styles.searchInput}
-          placeholder="Search notes..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
+      <input
+        style={styles.search}
+        placeholder="Search notes"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
 
       {/* NOTES */}
-      <h2>Your Notes</h2>
-
-      {filteredNotes.length === 0 && <p>No notes found.</p>}
-
       {filteredNotes.map((note) => (
         <div key={note.id} style={styles.noteCard}>
-          <h3>{note.title || "Untitled Note"}</h3>
-          <p style={styles.noteText}>{note.content}</p>
+          <div style={styles.header}>
+            <h3>{note.title || "Untitled"}</h3>
+            <button
+              style={styles.menuIcon}
+              onClick={() =>
+                setMenuOpen(menuOpen === note.id ? null : note.id)
+              }
+            >
+              ⋯
+            </button>
+          </div>
 
-          {/* AI SUMMARY */}
-          {note.summary && (
-            <div style={styles.summaryBox}>
-              <strong>AI Summary</strong>
-              <p>{note.summary}</p>
-            </div>
+          {/* EDIT MODE */}
+          {editId === note.id ? (
+            <>
+              <input
+                style={styles.input}
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
+              <textarea
+                style={styles.textarea}
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+              />
+              <button style={styles.primaryBtn} onClick={saveEdit}>
+                Save
+              </button>
+              <button
+                style={styles.cancelBtn}
+                onClick={() => setEditId(null)}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={styles.text}>{note.content}</p>
+
+              {/* MENU */}
+              {menuOpen === note.id && (
+                <div style={styles.menu}>
+                  <button
+                    style={styles.menuBtn}
+                    onClick={() => summarize(note.id)}
+                  >
+                    {loadingId === note.id
+                      ? "Summarizing…"
+                      : "Summarize 🧠"}
+                  </button>
+                  <button
+                    style={styles.menuBtn}
+                    onClick={() => startEdit(note)}
+                  >
+                    Edit ✏️
+                  </button>
+                  <button
+                    style={{ ...styles.menuBtn, color: "#dc2626" }}
+                    onClick={() => deleteNote(note.id)}
+                  >
+                    Delete 🗑️
+                  </button>
+                </div>
+              )}
+
+              {/* SUMMARY */}
+              {showSummary[note.id] && note.summary && (
+                <div style={styles.summary}>
+                  <strong>AI Summary</strong>
+                  <p>{note.summary}</p>
+                </div>
+              )}
+            </>
           )}
-
-          <button
-            style={styles.aiBtn}
-            onClick={() => generateSummary(note.id)}
-            disabled={loadingId === note.id}
-          >
-            {loadingId === note.id
-              ? "Generating..."
-              : note.summary
-              ? "Re-generate Summary"
-              : "Generate AI Summary"}
-          </button>
         </div>
       ))}
+
+      {filteredNotes.length === 0 && <p>No notes found.</p>}
     </div>
   );
 }
 
-/* ---------------- STYLES ---------------- */
+/* ---------- STYLES ---------- */
 const styles = {
   page: {
-    maxWidth: "900px",
+    maxWidth: "820px",
     margin: "auto",
     padding: "24px",
-    background: "#f5f7fb",
+    background: "#f8fafc",
     minHeight: "100vh",
-    fontFamily: "system-ui, Arial",
+    fontFamily: "system-ui",
   },
-  title: { textAlign: "center" },
-  subtitle: {
-    textAlign: "center",
-    color: "#555",
-    marginBottom: "28px",
-  },
+  title: { textAlign: "center", marginBottom: "20px" },
   card: {
     background: "#fff",
-    padding: "20px",
-    borderRadius: "12px",
-    marginBottom: "25px",
+    padding: "16px",
+    borderRadius: "14px",
+    marginBottom: "20px",
     boxShadow: "0 6px 16px rgba(0,0,0,0.08)",
   },
   input: {
     width: "100%",
-    padding: "10px",
-    marginBottom: "10px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
+    padding: "8px",
+    marginBottom: "8px",
+    borderRadius: "8px",
+    border: "1px solid #cbd5f5",
   },
   textarea: {
     width: "100%",
-    height: "120px",
-    padding: "10px",
-    marginBottom: "12px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
+    height: "90px",
+    padding: "8px",
+    marginBottom: "8px",
+    borderRadius: "8px",
+    border: "1px solid #cbd5f5",
   },
   primaryBtn: {
     background: "#2563eb",
     color: "#fff",
+    padding: "8px 14px",
     border: "none",
-    padding: "10px 18px",
-    borderRadius: "6px",
+    borderRadius: "8px",
     cursor: "pointer",
+    marginRight: "8px",
   },
-  searchBox: {
-    marginBottom: "20px",
+  cancelBtn: {
+    background: "#e5e7eb",
+    padding: "8px 14px",
+    borderRadius: "8px",
+    border: "none",
   },
-  searchInput: {
+  search: {
     width: "100%",
     padding: "10px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
+    borderRadius: "8px",
+    border: "1px solid #cbd5f5",
+    marginBottom: "20px",
   },
   noteCard: {
     background: "#fff",
-    padding: "18px",
-    borderRadius: "12px",
-    marginBottom: "18px",
-    boxShadow: "0 4px 10px rgba(0,0,0,0.07)",
+    padding: "14px",
+    borderRadius: "14px",
+    marginBottom: "16px",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.07)",
   },
-  noteText: {
-    color: "#333",
-    marginBottom: "10px",
-    whiteSpace: "pre-wrap",
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  summaryBox: {
-    background: "#eef2ff",
-    padding: "12px",
-    borderRadius: "8px",
-    marginBottom: "10px",
-  },
-  aiBtn: {
-    background: "#0ea5e9",
-    color: "#fff",
+  menuIcon: {
+    background: "none",
     border: "none",
-    padding: "8px 14px",
-    borderRadius: "6px",
+    fontSize: "22px",
     cursor: "pointer",
+  },
+  menu: { marginTop: "8px" },
+  menuBtn: {
+    display: "block",
+    background: "#eef2ff",
+    border: "1px solid #c7d2fe",
+    padding: "6px 12px",
+    marginBottom: "6px",
+    borderRadius: "8px",
+    cursor: "pointer",
+  },
+  text: { whiteSpace: "pre-wrap" },
+  summary: {
+    marginTop: "10px",
+    background: "#eef2ff",
+    padding: "10px",
+    borderRadius: "10px",
   },
 };
 
