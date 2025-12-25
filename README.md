@@ -1,10 +1,13 @@
-## 🚀 Live Demo
+## 🚀 Live Deployment
 
-Frontend (Vercel):  
+- **Frontend (Vercel)**:  
 https://ai-notes-app-tawny-phi.vercel.app/
 
-Backend API (Render):  
-https://ai-notes-app-5cid.onrender.com
+- **Backend API (Render)**:  
+  https://ai-notes-app-5cid.onrender.com
+
+> The backend is deployed as a Dockerized Node.js service on Render and exposes REST APIs consumed by the React frontend.
+
 
 
 # AI Notes App (Full Stack + Docker + Render + AI Embeddings)
