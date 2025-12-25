@@ -1,73 +1,148 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
-const API = "https://ai-notes-app-5cid.onrender.com/api";
+const BACKEND_URL = "https://ai-notes-app-5cid.onrender.com";
 
-export default function App() {
-  const [notes, setNotes] = useState([]);
+function App() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [notes, setNotes] = useState([]);
+  const [search, setSearch] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editContent, setEditContent] = useState("");
+  const [showSummaryId, setShowSummaryId] = useState(null);
 
-  const loadNotes = async () => {
-    const res = await fetch(`${API}/notes`);
-    setNotes(await res.json());
+  // 🔹 Fetch all notes
+  const fetchNotes = async () => {
+    const res = await fetch(`${BACKEND_URL}/api/notes`);
+    const data = await res.json();
+    setNotes(data);
   };
 
-  useEffect(() => { loadNotes(); }, []);
+  useEffect(() => {
+    fetchNotes();
+  }, []);
 
+  // 🔹 Save note
   const saveNote = async () => {
-    await fetch(`${API}/notes`, {
+    if (!content.trim()) return;
+
+    await fetch(`${BACKEND_URL}/api/notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title, content }),
     });
-    setTitle(""); setContent("");
-    loadNotes();
+
+    setTitle("");
+    setContent("");
+    fetchNotes();
   };
 
-  const summarize = async (id) => {
-    await fetch(`${API}/notes/${id}/summarize`, { method: "POST" });
-    loadNotes();
+  // 🔹 Delete note
+  const deleteNote = async (id) => {
+    await fetch(`${BACKEND_URL}/api/notes/${id}`, { method: "DELETE" });
+    fetchNotes();
   };
 
-  const remove = async (id) => {
-    await fetch(`${API}/notes/${id}`, { method: "DELETE" });
-    loadNotes();
+  // 🔹 Start editing
+  const startEdit = (note) => {
+    setEditingId(note.id);
+    setEditContent(note.content);
   };
+
+  // 🔹 Save edit
+  const saveEdit = async (id) => {
+    await fetch(`${BACKEND_URL}/api/notes/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: editContent }),
+    });
+
+    setEditingId(null);
+    fetchNotes();
+  };
+
+  // 🔹 AI Summarize (ON DEMAND)
+  const summarizeNote = async (id) => {
+    const res = await fetch(`${BACKEND_URL}/api/notes/${id}/summarize`, {
+      method: "POST",
+    });
+    const data = await res.json();
+
+    setNotes(notes.map(n =>
+      n.id === id ? { ...n, summary: data.summary } : n
+    ));
+    setShowSummaryId(id);
+  };
+
+  // 🔹 Search filter
+  const filteredNotes = notes.filter(n =>
+    n.title.toLowerCase().includes(search.toLowerCase()) ||
+    n.content.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
-    <div className="app">
-      <h1>AI Notes</h1>
+    <div className="container">
+      <h1>AI Notes App</h1>
+      <p className="subtitle">Smart notes with on-demand AI summary</p>
 
-      <div className="new-note">
-        <input placeholder="Title" value={title}
-          onChange={e => setTitle(e.target.value)} />
-        <textarea placeholder="Write note..."
+      {/* ADD NOTE */}
+      <div className="card">
+        <input
+          placeholder="Title (optional)"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        <textarea
+          placeholder="Write your note..."
           value={content}
-          onChange={e => setContent(e.target.value)} />
-        <button onClick={saveNote}>Save</button>
+          onChange={(e) => setContent(e.target.value)}
+        />
+        <button onClick={saveNote}>Save Note</button>
       </div>
 
-      <div className="notes">
-        {notes.map(n => (
-          <div className="card" key={n.id}>
-            <h3>{n.title}</h3>
-            <p>{n.content}</p>
+      {/* SEARCH */}
+      <input
+        className="search"
+        placeholder="Search notes..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
 
-            {n.summary && (
-              <div className="summary">
-                <strong>Summary</strong>
-                <p>{n.summary}</p>
-              </div>
-            )}
-
-            <div className="actions">
-              <button onClick={() => summarize(n.id)}>🧠</button>
-              <button onClick={() => remove(n.id)}>🗑</button>
+      {/* NOTES */}
+      {filteredNotes.map(note => (
+        <div key={note.id} className="note">
+          <div className="note-header">
+            <h3>{note.title || "Untitled"}</h3>
+            <div className="icons">
+              <span onClick={() => summarizeNote(note.id)}>🤖</span>
+              <span onClick={() => startEdit(note)}>✏️</span>
+              <span onClick={() => deleteNote(note.id)}>🗑️</span>
             </div>
           </div>
-        ))}
-      </div>
+
+          {editingId === note.id ? (
+            <>
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+              />
+              <button onClick={() => saveEdit(note.id)}>Save</button>
+            </>
+          ) : (
+            <p>{note.content}</p>
+          )}
+
+          {showSummaryId === note.id && note.summary && (
+            <div className="summary">
+              <strong>AI Summary</strong>
+              <p>{note.summary}</p>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
+
+export default App;
