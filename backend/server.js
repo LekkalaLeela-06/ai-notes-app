@@ -123,6 +123,25 @@ app.post("/api/notes/:id/summarize", async (req, res) => {
     res.status(500).json({ error: "Failed to summarize note" });
   }
 });
+/* ------------------ DB SETUP (RUN ONCE) ------------------ */
+app.get("/setup", async (req, res) => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS notes (
+        id SERIAL PRIMARY KEY,
+        title TEXT,
+        content TEXT,
+        summary TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    res.send("Database setup completed");
+  } catch (err) {
+    console.error("SETUP ERROR:", err);
+    res.status(500).send("Setup failed");
+  }
+});
 
 /* ------------------ START SERVER ------------------ */
 app.listen(PORT, () => {
