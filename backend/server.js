@@ -25,17 +25,12 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/* ------------------ ENSURE DB + TABLE (FIX) ------------------ */
+/* ------------------ INIT DATABASE (SAFE) ------------------ */
 async function initDB() {
   const client = await pool.connect();
   try {
-    // Always use public schema
     await client.query(`SET search_path TO public`);
 
-    // Enable pgvector
-    await client.query(`CREATE EXTENSION IF NOT EXISTS vector`);
-
-    // Create notes table
     await client.query(`
       CREATE TABLE IF NOT EXISTS public.notes (
         id SERIAL PRIMARY KEY,
@@ -44,13 +39,13 @@ async function initDB() {
         summary TEXT,
         embedding vector(1536),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+      );
     `);
 
-    console.log("✅ Database & notes table ready");
+    console.log("✅ Database ready");
   } catch (err) {
-    console.error("❌ Database init failed:", err);
-    process.exit(1); // stop app if DB is broken
+    console.error("❌ DB INIT ERROR:", err);
+    process.exit(1);
   } finally {
     client.release();
   }
@@ -66,15 +61,16 @@ app.post("/api/notes", async (req, res) => {
   try {
     const { title = "", content } = req.body;
     if (!content) {
-      return res.status(400).json({ error: "Content is required" });
+      return res.status(400).json({ error: "Content required" });
     }
 
-    const embedRes = await openai.embeddings.create({
+    // 🔹 OpenAI embedding
+    const embeddingResponse = await openai.embeddings.create({
       model: "text-embedding-3-small",
       input: content,
     });
 
-    const embedding = embedRes.data[0].embedding;
+    const embedding = embeddingResponse.data[0].embedding;
     const summary = content.slice(0, 120) + "...";
 
     const result = await pool.query(
@@ -103,7 +99,7 @@ app.get("/api/notes", async (req, res) => {
     `);
     res.json(result.rows);
   } catch (err) {
-    console.error("FETCH NOTES ERROR:", err);
+    console.error("FETCH ERROR:", err);
     res.status(500).json({ error: "Failed to fetch notes" });
   }
 });
@@ -152,7 +148,7 @@ app.delete("/api/notes/:id", async (req, res) => {
   }
 });
 
-/* ------------------ START SERVER (AFTER DB READY) ------------------ */
+/* ------------------ START SERVER ------------------ */
 initDB().then(() => {
   app.listen(PORT, () => {
     console.log(`🚀 Backend running on port ${PORT}`);
