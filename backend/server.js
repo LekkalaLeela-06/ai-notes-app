@@ -10,86 +10,105 @@ const { Pool } = pkg;
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-/* ---------- MIDDLEWARE ---------- */
+/* ------------------ MIDDLEWARE ------------------ */
 app.use(cors());
 app.use(express.json());
 
-/* ---------- DATABASE ---------- */
+/* ------------------ DATABASE ------------------ */
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 
-/* ---------- OPENAI ---------- */
+/* ------------------ OPENAI ------------------ */
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/* ---------- HEALTH ---------- */
+/* ------------------ ENSURE DB + TABLE (FIX) ------------------ */
+async function initDB() {
+  const client = await pool.connect();
+  try {
+    // Always use public schema
+    await client.query(`SET search_path TO public`);
+
+    // Enable pgvector
+    await client.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+
+    // Create notes table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS public.notes (
+        id SERIAL PRIMARY KEY,
+        title TEXT,
+        content TEXT NOT NULL,
+        summary TEXT,
+        embedding vector(1536),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log("✅ Database & notes table ready");
+  } catch (err) {
+    console.error("❌ Database init failed:", err);
+    process.exit(1); // stop app if DB is broken
+  } finally {
+    client.release();
+  }
+}
+
+/* ------------------ HEALTH ------------------ */
 app.get("/", (req, res) => {
   res.send("AI Notes Backend Running!");
 });
 
-/* ---------- SETUP ---------- */
-app.get("/setup", async (req, res) => {
-  try {
-    await pool.query(`
-      CREATE EXTENSION IF NOT EXISTS vector;
-
-      CREATE TABLE IF NOT EXISTS notes (
-        id SERIAL PRIMARY KEY,
-        title TEXT,
-        content TEXT,
-        summary TEXT,
-        embedding vector(1536),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    res.send("Database ready");
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Setup failed");
-  }
-});
-
-/* ---------- CREATE NOTE ---------- */
+/* ------------------ CREATE NOTE ------------------ */
 app.post("/api/notes", async (req, res) => {
   try {
     const { title = "", content } = req.body;
-    if (!content) return res.status(400).json({ error: "Content required" });
+    if (!content) {
+      return res.status(400).json({ error: "Content is required" });
+    }
 
-    /* Embedding */
-    const embeddingRes = await openai.embeddings.create({
+    const embedRes = await openai.embeddings.create({
       model: "text-embedding-3-small",
       input: content,
     });
 
-    const embedding = embeddingRes.data[0].embedding;
+    const embedding = embedRes.data[0].embedding;
     const summary = content.slice(0, 120) + "...";
 
     const result = await pool.query(
-      `INSERT INTO notes (title, content, summary, embedding)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
+      `
+      INSERT INTO public.notes (title, content, summary, embedding)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+      `,
       [title, content, summary, embedding]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("CREATE ERROR:", err);
+    console.error("CREATE NOTE ERROR:", err);
     res.status(500).json({ error: "Failed to save note" });
   }
 });
 
-/* ---------- GET ALL NOTES ---------- */
+/* ------------------ GET NOTES ------------------ */
 app.get("/api/notes", async (req, res) => {
-  const result = await pool.query(
-    "SELECT id, title, summary FROM notes ORDER BY id DESC"
-  );
-  res.json(result.rows);
+  try {
+    const result = await pool.query(`
+      SELECT id, title, summary, created_at
+      FROM public.notes
+      ORDER BY id DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("FETCH NOTES ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch notes" });
+  }
 });
 
-/* ---------- SEMANTIC SEARCH ---------- */
+/* ------------------ SEMANTIC SEARCH ------------------ */
 app.get("/api/search", async (req, res) => {
   const { q } = req.query;
   if (!q) return res.json([]);
@@ -105,7 +124,7 @@ app.get("/api/search", async (req, res) => {
     const result = await pool.query(
       `
       SELECT id, title, summary
-      FROM notes
+      FROM public.notes
       ORDER BY embedding <-> $1
       LIMIT 5
       `,
@@ -118,26 +137,24 @@ app.get("/api/search", async (req, res) => {
     res.status(500).json({ error: "Search failed" });
   }
 });
-app.get("/setup", async (req, res) => {
+
+/* ------------------ DELETE NOTE ------------------ */
+app.delete("/api/notes/:id", async (req, res) => {
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS notes (
-        id SERIAL PRIMARY KEY,
-        title TEXT,
-        content TEXT,
-        summary TEXT,
-        embedding vector(1536),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    res.send("Database setup completed");
+    await pool.query(
+      "DELETE FROM public.notes WHERE id = $1",
+      [req.params.id]
+    );
+    res.json({ success: true });
   } catch (err) {
-    console.error("SETUP ERROR:", err);
-    res.status(500).send("Setup failed");
+    console.error("DELETE ERROR:", err);
+    res.status(500).json({ error: "Delete failed" });
   }
 });
 
-/* ---------- START ---------- */
-app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+/* ------------------ START SERVER (AFTER DB READY) ------------------ */
+initDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`🚀 Backend running on port ${PORT}`);
+  });
 });
